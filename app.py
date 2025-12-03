@@ -119,45 +119,42 @@ def get_recommendations(title: str, df: pd.DataFrame, tfidf_matrix, nn_model, ti
 # ----------------------------
 st.set_page_config(page_title="Anime Recommender", layout="wide")
 st.title("🎬 Anime Recommendation System")
-st.write("Content-based engine using TF-IDF + cosine similarity. (Model trained in Jupyter Notebook)")
+# (hidden) st.write("Content-based engine using TF-IDF + cosine similarity. (Model trained in Jupyter Notebook)")
 
-# Sidebar: file paths and simple options
-st.sidebar.header("Files & options")
-csv_path = st.sidebar.text_input("Dataset CSV path", "anime-dataset-2023.csv")
-artifacts_path = st.sidebar.text_input("Artifacts pickle path", "anime_recommender_artifacts.pkl")
-topn = st.sidebar.slider("Number of recommendations", 3, 30, 10)
+# ----------------------------
+# Hard-coded configuration (no sidebar)
+# ----------------------------
+csv_path = "anime-dataset-2023.csv"
+artifacts_path = "anime_recommender_artifacts.pkl"
+topn = 10
 
-# Load dataset and artifacts
+# Load dataset and artifacts (silent failures stop without exposing error text)
 try:
     df = load_dataset(csv_path)
-except Exception as e:
-    st.error(f"Could not load dataset from '{csv_path}': {e}")
+except Exception:
+    # silent fail-stop (no detailed message shown)
     st.stop()
 
 try:
     tfidf, nn_model, saved_title_col = load_artifacts(artifacts_path)
-except Exception as e:
-    st.error(f"Could not load artifacts from '{artifacts_path}': {e}")
+except Exception:
     st.stop()
 
-# Build combined_text if missing
+# Build combined_text if missing (no user-facing info)
 if "combined_text" not in df.columns:
-    st.info("`combined_text` column not found — building it from available text columns (title, genres, synopsis, ...).")
     detected_title_col, text_cols = detect_text_columns(df)
     df["combined_text"] = build_combined_text(df, text_cols)
 else:
     detected_title_col, _ = detect_text_columns(df)
 
-# Ensure artifacts contain both tfidf and nn
+# Ensure artifacts contain both tfidf and nn (silent stop if not present)
 if tfidf is None or nn_model is None:
-    st.error("Artifacts pickle must contain 'tfidf' and 'nn' objects. Recreate artifacts from the notebook if missing.")
     st.stop()
 
 # Transform combined_text into TF-IDF matrix using loaded vectorizer
 try:
     tfidf_matrix = tfidf.transform(df["combined_text"].fillna("").astype(str).tolist())
-except Exception as e:
-    st.error(f"TF-IDF transform failed: {e}")
+except Exception:
     st.stop()
 
 # Determine title->index mapping
@@ -173,7 +170,6 @@ else:
 st.subheader("Search for an anime")
 col1, col2 = st.columns([4,1])
 with col1:
-    # allow selectbox with first N titles for quick pick or type a query
     select_choice = st.selectbox("Pick a title (quick) — or type below", options=[""] + title_list[:2000], index=0)
     typed_query = st.text_input("Or type title (fuzzy search)", "")
     query = typed_query.strip() if typed_query.strip() else (select_choice if select_choice else "")
@@ -190,8 +186,8 @@ if recommend_clicked:
     else:
         best, recs = get_recommendations(query, df, tfidf_matrix, nn_model, title_to_index, topn=topn)
         if recs is None:
+            # Silent: no raw error; provide friendly guidance
             st.error("Anime not found. Try a different spelling or choose from the dropdown.")
-            # show fuzzy suggestions if available
             try:
                 suggestions = get_close_matches(query, title_list, n=6, cutoff=0.35)
                 if suggestions:
